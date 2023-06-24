@@ -10,10 +10,10 @@ def point2int(p):
 
 
 def drawAxis(img, center, colour=(0, 0, 255), angle=0.):
-    hyp = 100
+    hyp = 1000
     linex = center[0] + np.sin(angle) * hyp
     liney = center[1] - np.cos(angle) * hyp
-    cv2.line(img, (int(center[0]), int(center[1])), (int(linex), int(liney)), colour, 1)
+    cv2.line(img, (int(center[0]), int(center[1])), (int(linex), int(liney)), colour, 3)
 
 
 def mask_it(frame, lower=(0, 0, 0), upper=(255, 255, 255)):
@@ -218,15 +218,15 @@ def plot_point(out, point, color):
     cv2.circle(out, point, 3, color, 2)
 
 
-def get_contour_extremes(img, c):
-    color = (255, 255, 255)
-    c = c['pts']
+def get_contour_extremes(c):
+    # color = (255, 255, 255)
+    # c = c['pts']
 
     M = cv2.moments(c)
     cX = int(M["m10"] / M["m00"])
     cY = int(M["m01"] / M["m00"])
-
-    plot_point(img, (cX, cY), color)
+    return cX, cY
+    # plot_point(img, (cX, cY), color)
 
     # extLeft = tuple(c[c[:, :, 0].argmin()][0])
     # extRight = tuple(c[c[:, :, 0].argmax()][0])

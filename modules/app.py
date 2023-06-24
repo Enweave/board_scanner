@@ -4,12 +4,49 @@ import typing
 
 from fps_limiter import LimitFPS
 
-from modules import BRIGHTNESS_KEY, CONTRAST_KEY, BW_KEY, ROI_WIDTH_KEY, ROI_HEIGHT_KEY, \
-    HALFPI, THRESHOLD_KEY
+from modules import (
+    BRIGHTNESS_KEY,
+    CONTRAST_KEY,
+    BW_KEY,
+    ROI_WIDTH_KEY,
+    ROI_HEIGHT_KEY,
+    HALFPI,
+    THRESHOLD_KEY,
+    HOLE_SIZE_MIN_KEY,
+    HOLE_SIZE_MAX_KEY,
+)
 from modules.camera import Droidcam
-from modules.utils import apply_brightness_contrast, mk_trakbar, drawAxis
+from modules.utils import (
+    apply_brightness_contrast,
+    mk_trakbar,
+    drawAxis,
+    combine_two_color_images_with_anchor, get_contour_extremes,
+)
 import numpy as np
 import cv2
+
+
+class SearchWindow:
+    def __init__(self, x: int, y: int, width: int, height: int):
+        self.x = x
+        self.y = y
+        self.tx = 0
+        self.ty = 0
+        self.bx = 0
+        self.by = 0
+        self.update_bounds(x, y, width, height)
+
+    def update_bounds(self, x: int, y: int, width: int, height: int):
+        self.tx = x + width // 2
+        self.ty = y + height // 2
+        self.bx = x - width // 2
+        self.by = y - height // 2
+
+    def get_roi(self, img: np.ndarray) -> np.ndarray:
+        return img[self.by : self.ty, self.bx : self.tx]
+
+    def offset_point(self, point: tuple) -> tuple:
+        return point[0] + self.tx, point[1] + self.ty
 
 
 class ScannerApp:
@@ -34,17 +71,20 @@ class ScannerApp:
         self._camera = self._setup_camera()
 
         self._setup_window()
+        self._search_window = None
         self._setup_trackbars()
 
     def _load_session_settings(self) -> dict:
         default_settings = {
-                BRIGHTNESS_KEY: 127,
-                CONTRAST_KEY: 127,
-                BW_KEY: 0,
-                ROI_WIDTH_KEY: 100,
-                ROI_HEIGHT_KEY: 100,
-                THRESHOLD_KEY: 127
-            }
+            BRIGHTNESS_KEY: 127,
+            CONTRAST_KEY: 127,
+            BW_KEY: 0,
+            ROI_WIDTH_KEY: 100,
+            ROI_HEIGHT_KEY: 100,
+            THRESHOLD_KEY: 127,
+            HOLE_SIZE_MIN_KEY: 100,
+            HOLE_SIZE_MAX_KEY: 700,
+        }
         if (
             os.path.isfile(self.settings_path)
             and not self._use_default_session_settings
@@ -63,22 +103,65 @@ class ScannerApp:
             json.dump(self.SESSION_SETTINGS, f)
 
     def _draw_roi(self, img: np.ndarray) -> np.ndarray:
+        if self._search_window:
+            center = (self._search_window.x, self._search_window.y)
+            cv2.rectangle(
+                img,
+                (self._search_window.bx, self._search_window.by),
+                (self._search_window.tx, self._search_window.ty),
+                (0, 255, 0),
+                thickness=4,
+            )
+        return img
+
+    def _detect_holes(
+        self, img: np.ndarray, thresh: np.ndarray
+    ) -> (np.ndarray, np.ndarray, typing.List):
+        filtered_contours = []
+        thresh = cv2.bitwise_not(thresh)
+        img_height, img_width = img.shape[:2]
         roi_width = self.SESSION_SETTINGS.get(ROI_WIDTH_KEY)
         roi_height = self.SESSION_SETTINGS.get(ROI_HEIGHT_KEY)
-        img_height, img_width = img.shape[:2]
-        center = (img_width // 2, img_height // 2)
-        x = (img_width - roi_width) // 2
-        y = (img_height - roi_height) // 2
-        cv2.rectangle(
-            img, (x, y), (x + roi_width, y + roi_height), (0, 255, 0), thickness=4
+        if not self._search_window:
+            self._search_window = SearchWindow(
+                img_width // 2, img_height // 2, roi_width, roi_height
+            )
+        else:
+            self._search_window.update_bounds(
+                img_width // 2, img_height // 2, roi_width, roi_height
+            )
+
+        roi_part = self._search_window.get_roi(thresh)
+        contours, _ = cv2.findContours(
+            roi_part, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
         )
-        drawAxis(img, center, (0, 0, 255), 0)
-        drawAxis(img, center, (0, 0, 255), HALFPI)
-        return img
+
+        for cnt in contours:
+            area = cv2.contourArea(cnt)
+            if (
+                self.SESSION_SETTINGS.get(HOLE_SIZE_MIN_KEY)
+                < area
+                < self.SESSION_SETTINGS.get(HOLE_SIZE_MAX_KEY)
+            ):
+                filtered_contours.append(cnt)
+
+        roi_part = cv2.cvtColor(roi_part, cv2.COLOR_GRAY2BGR)
+        if filtered_contours:
+            for cnt in filtered_contours:
+                cv2.drawContours(roi_part, [cnt], 0, (255, 0, 0), cv2.FILLED)
+                center = get_contour_extremes(cnt)
+                drawAxis(roi_part, center, (0, 0, 255), 0)
+                drawAxis(roi_part, center, (0, 0, 255), HALFPI)
+        combine_two_color_images_with_anchor(
+            img, roi_part, self._search_window.bx, self._search_window.by
+        )
+        return img, filtered_contours
 
     def _cycle(self):
         frame = self._camera.read()
-        frame = self._apply_filters(frame)
+        frame, thresh = self._apply_filters(frame)
+        if thresh is not None:
+            frame, contours = self._detect_holes(frame, thresh)
         frame = self._draw_roi(frame)
         cv2.imshow(self._window_name, frame)
 
@@ -105,23 +188,25 @@ class ScannerApp:
         mk_trakbar(self._window_name, self.SESSION_SETTINGS, BW_KEY, 1)
         mk_trakbar(self._window_name, self.SESSION_SETTINGS, ROI_WIDTH_KEY, 700)
         mk_trakbar(self._window_name, self.SESSION_SETTINGS, ROI_HEIGHT_KEY, 700)
+        mk_trakbar(self._window_name, self.SESSION_SETTINGS, HOLE_SIZE_MIN_KEY, 100000)
+        mk_trakbar(self._window_name, self.SESSION_SETTINGS, HOLE_SIZE_MAX_KEY, 3069797)
 
-    def _apply_filters(self, img: np.ndarray) -> np.ndarray:
+    def _apply_filters(self, img: np.ndarray) -> (np.ndarray, np.ndarray):
         img = apply_brightness_contrast(
             img,
             self.SESSION_SETTINGS.get(BRIGHTNESS_KEY),
             self.SESSION_SETTINGS.get(CONTRAST_KEY),
         )
+        thresh = None
         if self.SESSION_SETTINGS.get(BW_KEY):
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            img = cv2.threshold(
-                img,
+            grey = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            _, thresh = cv2.threshold(
+                grey,
                 self.SESSION_SETTINGS.get(THRESHOLD_KEY),
                 255,
                 cv2.THRESH_BINARY,
-            )[1]
-            img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
-        return img
+            )
+        return img, thresh
 
     def _setup_camera(self) -> Droidcam:
         if self._still_image:
