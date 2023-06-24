@@ -32,6 +32,8 @@ pyproject-hooks==1.0.0
     # via build
 pyserial==3.5
     # via -r requirements.in
+python-dotenv==1.0.0
+    # via -r requirements.in
 requests==2.31.0
     # via -r requirements.in
 tomli==2.0.1
