@@ -1,0 +1,6 @@
+pip-tools==6.13.0
+pyserial==3.5
+opencv-python==4.5.5.64
+requests==2.31.0
+imutils==0.5.4
+Pillow==9.5.0
