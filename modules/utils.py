@@ -41,16 +41,17 @@ def rect_get_center(A, B):
     return xCenter, yCenter
 
 
-def mk_trakbar(window, dikt, key, max):
+def mk_trakbar(window: str, dikt: dict, key: str, maxv: int) -> None:
     def callback(value):
         dikt[key] = value
-    cv2.createTrackbar(key, window, dikt.get(key, 0), max, callback)
+
+    cv2.createTrackbar(key, window, dikt.get(key, 0), maxv, callback)
 
 
 def calibrate_aquire(frame, w=9, h=9):
     criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 10, 0.001)
 
-    objp = np.zeros((w*h, 3), np.float32)
+    objp = np.zeros((w * h, 3), np.float32)
     objp[:, :2] = np.mgrid[0:w, 0:h].T.reshape(-1, 2)
 
     detect = False
@@ -76,7 +77,8 @@ def calibrate_aquire(frame, w=9, h=9):
 def create_calibration(frame, objpoints, imgpoints, w=None, h=None):
     if w == None and h == None:
         h, w = frame.shape[:2]
-    ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(objpoints, imgpoints, (w, h), None, None)
+    ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(objpoints, imgpoints, (w, h),
+                                                       None, None)
 
     mean_error = 0
 
@@ -107,7 +109,8 @@ def apply_calibtation(frame, mtx, dist, newmtx, roi, crop=False):
     return frame
 
 
-def offset_point(point, rotation_vector, translation_vector, camera_matrix, dist_coeffs):
+def offset_point(point, rotation_vector, translation_vector, camera_matrix,
+                 dist_coeffs):
     nose_end_point2D, jacobian = cv2.projectPoints(
         np.array([(float(point[0]), float(point[1]), -40.0)]),
         rotation_vector,
@@ -119,17 +122,17 @@ def offset_point(point, rotation_vector, translation_vector, camera_matrix, dist
 
 
 def solve_marker_plane(im, image_points, calibrator, center):
-
     model_points = np.array([
-        (0.0, 0.0, 0.0    ),  # 'lt'
-        (160.0, 0.0, 0.0  ),  # 'rt'
+        (0.0, 0.0, 0.0),  # 'lt'
+        (160.0, 0.0, 0.0),  # 'rt'
         (160.0, 100.0, 0.0),  # 'rb'
-        (0.0, 100.0, 0.0  ),  # 'lb'
+        (0.0, 100.0, 0.0),  # 'lb'
         # (80.0, 50.0, 0.0  )   # center
     ], dtype=np.float32)
 
     # print(image_points.shape)
-    image_points_a = np.ascontiguousarray(image_points[:, :2]).reshape((image_points.shape[0], 1, 2))
+    image_points_a = np.ascontiguousarray(image_points[:, :2]).reshape(
+        (image_points.shape[0], 1, 2))
     # model_points_a = np.ascontiguousarray(model_points[:, :2]).reshape((model_points.shape[0], 1, 2))
     rvec = np.zeros((3, 1))
     tvec = np.zeros((3, 1))
@@ -151,7 +154,8 @@ def solve_marker_plane(im, image_points, calibrator, center):
     prev_point = None
     first_point = None
     for i, p in enumerate(image_points):
-        p2 = offset_point(model_points[i], rotation_vector, translation_vector, camera_matrix, dist_coeffs)
+        p2 = offset_point(model_points[i], rotation_vector, translation_vector,
+                          camera_matrix, dist_coeffs)
         roof_points.append(p2)
 
         if prev_point:
@@ -162,25 +166,30 @@ def solve_marker_plane(im, image_points, calibrator, center):
     cv2.line(im, prev_point, first_point, (255, 0, 0), 1)
 
     for i, p2 in enumerate(roof_points):
-        cv2.line(im, (int(image_points[i][0]), int(image_points[i][1])), p2, (0, 225, 0), 2)
+        cv2.line(im, (int(image_points[i][0]), int(image_points[i][1])), p2,
+                 (0, 225, 0), 2)
 
-    cv2.line(im, center, offset_point((80,50), rotation_vector, translation_vector, camera_matrix, dist_coeffs), (0, 225, 0), 2)
+    cv2.line(im, center,
+             offset_point((80, 50), rotation_vector, translation_vector, camera_matrix,
+                          dist_coeffs), (0, 225, 0), 2)
 
 
-def combine_two_color_images_with_anchor(background, foreground, anchor_x=0, anchor_y=0, alpha=0):
+def combine_two_color_images_with_anchor(background, foreground, anchor_x=0, anchor_y=0,
+                                         alpha=0):
     # Check if the foreground is inbound with the new coordinates and raise an error if out of bounds
     background_height = background.shape[1]
     background_width = background.shape[1]
     foreground_height = foreground.shape[0]
     foreground_width = foreground.shape[1]
-    if foreground_height+anchor_y > background_height or foreground_width+anchor_x > background_width:
-        raise ValueError("The foreground image exceeds the background boundaries at this location")
+    if foreground_height + anchor_y > background_height or foreground_width + anchor_x > background_width:
+        raise ValueError(
+            "The foreground image exceeds the background boundaries at this location")
 
     # do composite at specified location
     start_y = anchor_y
     start_x = anchor_x
-    end_y = anchor_y+foreground_height
-    end_x = anchor_x+foreground_width
+    end_y = anchor_y + foreground_height
+    end_x = anchor_x + foreground_width
 
     # b_channel, g_channel, r_channel = cv2.split(foreground)
 
@@ -194,7 +203,8 @@ def combine_two_color_images_with_anchor(background, foreground, anchor_x=0, anc
 
 
 def get_ip():
-    ips = [ip for ip in socket.gethostbyname_ex(socket.gethostname())[2] if not ip.startswith("127.")]
+    ips = [ip for ip in socket.gethostbyname_ex(socket.gethostname())[2] if
+           not ip.startswith("127.")]
 
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s.connect(("8.8.8.8", 80))
@@ -218,8 +228,6 @@ def get_contour_extremes(img, c):
 
     plot_point(img, (cX, cY), color)
 
-
-
     # extLeft = tuple(c[c[:, :, 0].argmin()][0])
     # extRight = tuple(c[c[:, :, 0].argmax()][0])
     # extTop = tuple(c[c[:, :, 1].argmin()][0])
@@ -230,9 +238,11 @@ def get_contour_extremes(img, c):
     # plot_point(img, extRight, color)
 
 
-def apply_brightness_contrast(input_img, brightness=255, contrast=127):
-    brightness = interp(brightness, [0, 255], [-255, 255])
-    contrast = interp(contrast, [0, 254], [-127, 127])
+def apply_brightness_contrast(
+        input_img: np.ndarray, brightness=127, contrast=127
+) -> np.ndarray:
+    brightness = interp(brightness, [0, 255], [-126, 126])
+    contrast = interp(contrast, [0, 255], [-126, 126])
 
     if brightness != 0:
         if brightness > 0:
@@ -255,6 +265,13 @@ def apply_brightness_contrast(input_img, brightness=255, contrast=127):
 
         buf = cv2.addWeighted(buf, alpha_c, buf, 0, gamma_c)
 
-    cv2.putText(buf, 'B:{},C:{}'.format(brightness, contrast), (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255),
-                2)
+    cv2.putText(
+        buf,
+        "B:{},C:{}".format(brightness, contrast),
+        (10, 30),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        1,
+        (0, 0, 255),
+        2,
+    )
     return buf
