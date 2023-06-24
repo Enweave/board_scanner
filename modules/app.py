@@ -4,7 +4,8 @@ import typing
 
 from fps_limiter import LimitFPS
 
-from modules import BRIGHTNESS_KEY, CONTRAST_KEY, BW_KEY, ROI_WIDTH, ROI_HEIGHT, HALFPI
+from modules import BRIGHTNESS_KEY, CONTRAST_KEY, BW_KEY, ROI_WIDTH_KEY, ROI_HEIGHT_KEY, \
+    HALFPI, THRESHOLD_KEY
 from modules.camera import Droidcam
 from modules.utils import apply_brightness_contrast, mk_trakbar, drawAxis
 import numpy as np
@@ -40,8 +41,9 @@ class ScannerApp:
                 BRIGHTNESS_KEY: 127,
                 CONTRAST_KEY: 127,
                 BW_KEY: 0,
-                ROI_WIDTH: 100,
-                ROI_HEIGHT: 100,
+                ROI_WIDTH_KEY: 100,
+                ROI_HEIGHT_KEY: 100,
+                THRESHOLD_KEY: 127
             }
         if (
             os.path.isfile(self.settings_path)
@@ -61,8 +63,8 @@ class ScannerApp:
             json.dump(self.SESSION_SETTINGS, f)
 
     def _draw_roi(self, img: np.ndarray) -> np.ndarray:
-        roi_width = self.SESSION_SETTINGS.get(ROI_WIDTH)
-        roi_height = self.SESSION_SETTINGS.get(ROI_HEIGHT)
+        roi_width = self.SESSION_SETTINGS.get(ROI_WIDTH_KEY)
+        roi_height = self.SESSION_SETTINGS.get(ROI_HEIGHT_KEY)
         img_height, img_width = img.shape[:2]
         center = (img_width // 2, img_height // 2)
         x = (img_width - roi_width) // 2
@@ -70,10 +72,8 @@ class ScannerApp:
         cv2.rectangle(
             img, (x, y), (x + roi_width, y + roi_height), (0, 255, 0), thickness=4
         )
-        # draw crosshair
         drawAxis(img, center, (0, 0, 255), 0)
         drawAxis(img, center, (0, 0, 255), HALFPI)
-        # drawAxis(img, (img_height // 2, img_width // 2), (0, 0, 255), 0.5)
         return img
 
     def _cycle(self):
@@ -101,9 +101,10 @@ class ScannerApp:
     def _setup_trackbars(self):
         mk_trakbar(self._window_name, self.SESSION_SETTINGS, BRIGHTNESS_KEY, 255)
         mk_trakbar(self._window_name, self.SESSION_SETTINGS, CONTRAST_KEY, 255)
+        mk_trakbar(self._window_name, self.SESSION_SETTINGS, THRESHOLD_KEY, 255)
         mk_trakbar(self._window_name, self.SESSION_SETTINGS, BW_KEY, 1)
-        mk_trakbar(self._window_name, self.SESSION_SETTINGS, ROI_WIDTH, 700)
-        mk_trakbar(self._window_name, self.SESSION_SETTINGS, ROI_HEIGHT, 700)
+        mk_trakbar(self._window_name, self.SESSION_SETTINGS, ROI_WIDTH_KEY, 700)
+        mk_trakbar(self._window_name, self.SESSION_SETTINGS, ROI_HEIGHT_KEY, 700)
 
     def _apply_filters(self, img: np.ndarray) -> np.ndarray:
         img = apply_brightness_contrast(
@@ -113,6 +114,12 @@ class ScannerApp:
         )
         if self.SESSION_SETTINGS.get(BW_KEY):
             img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            img = cv2.threshold(
+                img,
+                self.SESSION_SETTINGS.get(THRESHOLD_KEY),
+                255,
+                cv2.THRESH_BINARY,
+            )[1]
             img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
         return img
 

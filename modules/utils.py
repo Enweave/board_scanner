@@ -264,14 +264,4 @@ def apply_brightness_contrast(
         gamma_c = 127 * (1 - f)
 
         buf = cv2.addWeighted(buf, alpha_c, buf, 0, gamma_c)
-
-    cv2.putText(
-        buf,
-        "B:{},C:{}".format(brightness, contrast),
-        (10, 30),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        1,
-        (0, 0, 255),
-        2,
-    )
     return buf
