@@ -1,3 +1,4 @@
+import logging
 import os
 
 from modules.app import ScannerApp
@@ -6,6 +7,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 if __name__ == "__main__":
+    logging.info("start")
     CAMERA_INDEX = int(os.getenv("WEBCAM_INDEX", 0))
     IMAGE_PATH = os.getenv("STILL_IMAGE_PATH", None)
     FPS = int(os.getenv("FPS_LIMIT", 30))

@@ -76,9 +76,11 @@ class ScannerApp:
         self._fps_limiter = LimitFPS(fps=self._fps_limit)
         self._camera = self._setup_camera()
 
+        img = self._camera.read()
+        max_height, max_width = img.shape[:2]
         self._setup_window()
         self._search_window = None
-        self._setup_trackbars()
+        self._setup_trackbars(max_width, max_height)
 
     def _load_session_settings(self) -> dict:
         default_settings = {
@@ -126,8 +128,8 @@ class ScannerApp:
         filtered_contours = []
         thresh = cv2.bitwise_not(thresh)
         img_height, img_width = img.shape[:2]
-        roi_width = self.SESSION_SETTINGS.get(ROI_WIDTH_KEY)
-        roi_height = self.SESSION_SETTINGS.get(ROI_HEIGHT_KEY)
+        roi_width = self.SESSION_SETTINGS.get(ROI_WIDTH_KEY) | 2
+        roi_height = self.SESSION_SETTINGS.get(ROI_HEIGHT_KEY) | 2
         if not self._search_window:
             self._search_window = SearchWindow(
                 img_width // 2, img_height // 2, roi_width, roi_height
@@ -165,13 +167,13 @@ class ScannerApp:
     def _setup_window(self):
         cv2.namedWindow(self._window_name)
 
-    def _setup_trackbars(self):
+    def _setup_trackbars(self, max_width: int, max_height: int):
         mk_trakbar(self._window_name, self.SESSION_SETTINGS, BRIGHTNESS_KEY, 255)
         mk_trakbar(self._window_name, self.SESSION_SETTINGS, CONTRAST_KEY, 255)
         mk_trakbar(self._window_name, self.SESSION_SETTINGS, THRESHOLD_KEY, 255)
         mk_trakbar(self._window_name, self.SESSION_SETTINGS, BW_KEY, 1)
-        mk_trakbar(self._window_name, self.SESSION_SETTINGS, ROI_WIDTH_KEY, 700)
-        mk_trakbar(self._window_name, self.SESSION_SETTINGS, ROI_HEIGHT_KEY, 700)
+        mk_trakbar(self._window_name, self.SESSION_SETTINGS, ROI_WIDTH_KEY, max_width-1)
+        mk_trakbar(self._window_name, self.SESSION_SETTINGS, ROI_HEIGHT_KEY, max_height-1)
         mk_trakbar(self._window_name, self.SESSION_SETTINGS, HOLE_SIZE_MIN_KEY, 100000)
         mk_trakbar(self._window_name, self.SESSION_SETTINGS, HOLE_SIZE_MAX_KEY, 3069797)
 
@@ -216,9 +218,9 @@ class ScannerApp:
 
     def _setup_machine(self) -> GRBL:
         machine = GRBL(port=self._machine_port)
-        machine.reset()
+        # machine.reset()
         machine.send_wake_up()
-        machine.home()
+        # machine.home()
         return machine
 
     def get_point_offest_from_image_center(self,img: np.ndarray, point: typing.Tuple[int, int]):
