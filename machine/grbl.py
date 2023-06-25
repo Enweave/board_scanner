@@ -7,6 +7,7 @@ from tools.uart import serial_ports
 
 BAUD_RATE = 115200
 
+
 class GRBL:
     logger = logging.getLogger('GRBL')
     logger.setLevel(logging.DEBUG)
@@ -20,21 +21,22 @@ class GRBL:
     def send_wake_up(self):
         self.logger.info(f'Wake up Neo...')
         self.conn.write(str.encode("\r\n\r\n"))
-        time.sleep(2)
+        time.sleep(1)
         self.conn.flushInput()
 
     def send_command(self, command: str):
         self.logger.info(f'>>> {command}')
         self.conn.write(str.encode(command))
-        time.sleep(0.01)
         idle_counter = 0
         while True:
-            time.sleep(0.001)
-            self.conn.reset_input_buffer()
             command = str.encode('?' + '\n')
+            self.conn.reset_input_buffer()
             self.conn.write(command)
             grbl_out = self.conn.readline()
             grbl_response = grbl_out.strip().decode('utf-8')
+            if 'Error' in grbl_response or 'Reset' in grbl_response or 'ALARM' in grbl_response:
+                self.logger.error('Destruction move!!!')
+                raise Exception('Destruction move!!!')
             if grbl_response != 'ok':
                 if grbl_response.find('Idle') > 0:
                     idle_counter += 1
@@ -42,20 +44,29 @@ class GRBL:
                 break
 
     def set_zero(self):
-        command = 'G10 P0 L20 X0 Y0 Z0'
-        self.send_command(command)
+        self.send_command('G10 P0 L20 X0 Y0 Z0')
 
     def go_to(self, x, y, f=2000):
         command = f'G0X{x}Y{y}F{f}'
         self.send_command(command)
+
+    def home(self):
+        self.send_command('$H')
+
+    def reset(self):
+        self.conn.setDTR(False)  # Drop DTR
+        time.sleep(0.022)  # Read somewhere that 22ms is what the UI does.
+        self.conn.setDTR(True)  # UP the DTR back
+        self.send_command('$X')
+
 
     def go_to_zero(self):
         command = f'G90G0X0Y0'
         self.send_command(command)
 
     def jog(self, d_x, d_y, f=4000):
-        command = f'$J=G21G91X{d_x}Y{d_y}F{f}'
-        self.send_command(command)
+        # silent to ALARM)))
+        self.send_command(f'$J=G21G91X{d_x}Y{d_y}F{f}')
 
     def __del__(self):
         try:
@@ -68,12 +79,17 @@ class GRBL:
 if __name__ == '__main__':
     # TODO
     logging.info("start")
-    
+
     print(serial_ports())
     g = GRBL("COM6")
     g.send_wake_up()
-    g.set_zero()
-    g.jog(-10, 0)
-    g.go_to(10, 10)
-    g.go_to_zero()
+    g.home()
+
+    # try:
+    #     g.go_to(10, 10)
+    # except Exception as e:
+    #     g.reset()
+    #     g.home()
+    #     g.go_to(-10, -10)
+    #
     exit(0)
