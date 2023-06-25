@@ -20,7 +20,8 @@ from modules.utils import (
     apply_brightness_contrast,
     mk_trakbar,
     drawAxis,
-    combine_two_color_images_with_anchor, get_contour_extremes,
+    combine_two_color_images_with_anchor,
+    get_contour_extremes,
 )
 import numpy as np
 import cv2
@@ -46,7 +47,7 @@ class SearchWindow:
         return img[self.by : self.ty, self.bx : self.tx]
 
     def offset_point(self, point: tuple) -> tuple:
-        return point[0] + self.tx, point[1] + self.ty
+        return point[0] + self.bx, point[1] + self.by
 
 
 class ScannerApp:
@@ -104,7 +105,6 @@ class ScannerApp:
 
     def _draw_roi(self, img: np.ndarray) -> np.ndarray:
         if self._search_window:
-            center = (self._search_window.x, self._search_window.y)
             cv2.rectangle(
                 img,
                 (self._search_window.bx, self._search_window.by),
@@ -116,7 +116,8 @@ class ScannerApp:
 
     def _detect_holes(
         self, img: np.ndarray, thresh: np.ndarray
-    ) -> (np.ndarray, np.ndarray, typing.List):
+    ) -> (np.ndarray, typing.List):
+        centers = []
         filtered_contours = []
         thresh = cv2.bitwise_not(thresh)
         img_height, img_width = img.shape[:2]
@@ -148,35 +149,13 @@ class ScannerApp:
         roi_part = cv2.cvtColor(roi_part, cv2.COLOR_GRAY2BGR)
         if filtered_contours:
             for cnt in filtered_contours:
-                cv2.drawContours(roi_part, [cnt], 0, (255, 0, 0), cv2.FILLED)
+                cv2.drawContours(roi_part, [cnt], 0, (255, 0, 0), 1)
                 center = get_contour_extremes(cnt)
-                drawAxis(roi_part, center, (0, 0, 255), 0)
-                drawAxis(roi_part, center, (0, 0, 255), HALFPI)
+                centers.append(self._search_window.offset_point(center))
         combine_two_color_images_with_anchor(
             img, roi_part, self._search_window.bx, self._search_window.by
         )
-        return img, filtered_contours
-
-    def _cycle(self):
-        frame = self._camera.read()
-        frame, thresh = self._apply_filters(frame)
-        if thresh is not None:
-            frame, contours = self._detect_holes(frame, thresh)
-        frame = self._draw_roi(frame)
-        cv2.imshow(self._window_name, frame)
-
-    def _stop(self):
-        self._camera.__del__()
-        self._save_session_settings()
-        cv2.destroyAllWindows()
-
-    def run(self):
-        while True:
-            if cv2.waitKey(1) == ord("q"):
-                self._stop()
-                break
-            if self._fps_limiter():
-                self._cycle()
+        return img, centers
 
     def _setup_window(self):
         cv2.namedWindow(self._window_name)
@@ -208,8 +187,46 @@ class ScannerApp:
             )
         return img, thresh
 
+    def _draw_center(
+        self, img: np.ndarray, center: typing.Tuple[int, int]
+    ) -> np.ndarray:
+        drawAxis(img, center, (0, 0, 255), 0)
+        drawAxis(img, center, (0, 0, 255), HALFPI)
+        cv2.circle(img, center, 5, (0, 0, 255), cv2.FILLED)
+        cv2.putText(
+            img, str(center), center, cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2
+        )
+        return img
+
+    def _draw_centers(self, img: np.ndarray, centers: typing.List) -> np.ndarray:
+        for center in centers:
+            self._draw_center(img, center)
+        return img
+
     def _setup_camera(self) -> Droidcam:
         if self._still_image:
             return Droidcam(use_webcam=False, img_src=self._still_image)
         else:
             return Droidcam(use_webcam=True, webcam_index=self._webcam_index)
+
+    def _cycle(self):
+        frame = self._camera.read()
+        frame, thresh = self._apply_filters(frame)
+        if thresh is not None:
+            frame, centers = self._detect_holes(frame, thresh)
+            frame = self._draw_centers(frame, centers)
+        frame = self._draw_roi(frame)
+        cv2.imshow(self._window_name, frame)
+
+    def _stop(self):
+        self._camera.__del__()
+        self._save_session_settings()
+        cv2.destroyAllWindows()
+
+    def run(self):
+        while True:
+            if cv2.waitKey(1) == ord("q"):
+                self._stop()
+                break
+            if self._fps_limiter():
+                self._cycle()
