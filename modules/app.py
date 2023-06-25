@@ -221,6 +221,13 @@ class ScannerApp:
         machine.home()
         return machine
 
+    def get_point_offest_from_image_center(self,img: np.ndarray, point: typing.Tuple[int, int]):
+        img_width, img_height = img.shape[:2]
+        return (
+            point[0] - img_width // 2,
+            point[1] - img_height // 2,
+        )
+
     def _cycle(self):
         frame = self._camera.read()
         frame, thresh = self._apply_filters(frame)
