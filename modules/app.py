@@ -4,6 +4,7 @@ import typing
 
 from fps_limiter import LimitFPS
 
+from machine.grbl import GRBL
 from modules import (
     BRIGHTNESS_KEY,
     CONTRAST_KEY,
@@ -53,12 +54,16 @@ class SearchWindow:
 class ScannerApp:
     def __init__(
         self,
+        machine_port: str,
         window_name: str = "board_scanner",
         fps_limit: int = 30,
         webcam_index: int = 0,
         still_image: typing.Union[str, os.PathLike] = None,
         use_default_session_settings: bool = False,
     ):
+        self.is_running = False
+        self._machine_port = machine_port
+        self.machine = self._setup_machine()
         self._window_name = window_name
         self._fps_limit = fps_limit
         self._use_default_session_settings = use_default_session_settings
@@ -209,6 +214,13 @@ class ScannerApp:
         else:
             return Droidcam(use_webcam=True, webcam_index=self._webcam_index)
 
+    def _setup_machine(self) -> GRBL:
+        machine = GRBL(port=self._machine_port)
+        machine.reset()
+        machine.send_wake_up()
+        machine.home()
+        return machine
+
     def _cycle(self):
         frame = self._camera.read()
         frame, thresh = self._apply_filters(frame)
@@ -221,12 +233,26 @@ class ScannerApp:
     def _stop(self):
         self._camera.__del__()
         self._save_session_settings()
+        self.is_running = False
         cv2.destroyAllWindows()
 
+    def _keyboard_handler(self, key):
+        JOG_VALUE = 1
+        if key == ord("q"):
+            self._stop()
+        elif key == ord("w"):
+            self.machine.jog(d_x=0, d_y=JOG_VALUE)
+        elif key == ord("s"):
+            self.machine.jog(d_x=0, d_y=-JOG_VALUE)
+        elif key == ord("a"):
+            self.machine.jog(d_x=-JOG_VALUE, d_y=0)
+        elif key == ord("d"):
+            self.machine.jog(d_x=JOG_VALUE, d_y=0)
+
     def run(self):
-        while True:
-            if cv2.waitKey(1) == ord("q"):
-                self._stop()
-                break
+        self.is_running = True
+        while self.is_running:
             if self._fps_limiter():
+                key = cv2.waitKey(1)
+                self._keyboard_handler(key)
                 self._cycle()

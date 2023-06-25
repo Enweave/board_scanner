@@ -10,10 +10,15 @@ if __name__ == "__main__":
     IMAGE_PATH = os.getenv("STILL_IMAGE_PATH", None)
     FPS = int(os.getenv("FPS_LIMIT", 30))
     USE_STILL_IMAGE = os.getenv("USE_STILL", False)
-
+    MACHINE_PORT = os.getenv("MACHINE_PORT", "COM6")
+    print(MACHINE_PORT)
     if USE_STILL_IMAGE:
-        app = ScannerApp(still_image=IMAGE_PATH, fps_limit=FPS)
+        app = ScannerApp(
+            machine_port=MACHINE_PORT, still_image=IMAGE_PATH, fps_limit=FPS
+        )
     else:
-        app = ScannerApp(webcam_index=CAMERA_INDEX, fps_limit=FPS)
+        app = ScannerApp(
+            machine_port=MACHINE_PORT, webcam_index=CAMERA_INDEX, fps_limit=FPS
+        )
 
     app.run()
